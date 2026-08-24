@@ -16,8 +16,14 @@ def load_sessions(path: str) -> List[Session]:
     return [Session.from_dict(json.load(open(f, encoding="utf-8"))) for f in files]
 
 
-def run(sessions: List[Session], system: Callable[[Session], SystemOutput]) -> Dict:
-    outs = {s.session_id: system(s) for s in sessions}
+def run(sessions: List[Session], system: Callable[[Session], SystemOutput],
+        progress_every: int = 20) -> Dict:
+    import sys
+    outs = {}
+    for i, s in enumerate(sessions, 1):
+        outs[s.session_id] = system(s)
+        if progress_every and i % progress_every == 0:
+            print(f"[progress] {i}/{len(sessions)} sessions", file=sys.stderr, flush=True)
     return aggregate(sessions, outs)
 
 
