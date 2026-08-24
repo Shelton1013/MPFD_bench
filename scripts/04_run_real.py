@@ -17,11 +17,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sessions", default="data/rendered", help="dir of rendered sessions (with audio_path)")
     ap.add_argument("--pred", default="vad_dyadic")
-    ap.add_argument("--model_path", default=None, help="for --pred freeze_omni")
+    ap.add_argument("--fo_repo", default=None, help="freeze_omni: path to cloned Freeze-Omni repo")
+    ap.add_argument("--model_path", default=None, help="freeze_omni: --model_path (audiollm checkpoints)")
+    ap.add_argument("--llm_path", default=None, help="freeze_omni: frozen Qwen2-7B-Instruct path")
     args = ap.parse_args()
 
     if args.pred == "freeze_omni":
-        system = FreezeOmniBaseline(args.model_path)
+        if not (args.fo_repo and args.model_path and args.llm_path):
+            raise SystemExit("freeze_omni needs --fo_repo --model_path --llm_path")
+        system = FreezeOmniBaseline(args.fo_repo, args.model_path, args.llm_path)
     elif args.pred in REAL_SYSTEMS:
         system = REAL_SYSTEMS[args.pred]
     else:

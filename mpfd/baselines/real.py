@@ -81,46 +81,68 @@ def vad_dyadic_baseline(session: Session) -> SystemOutput:
 
 # ---------------- real model: Freeze-Omni ----------------
 class FreezeOmniBaseline:
-    """Adapter around Freeze-Omni (https://github.com/VITA-MLLM/Freeze-Omni).
+    """Adapter around Freeze-Omni (https://github.com/VITA-MLLM/Freeze-Omni), source-verified.
 
-    Usage:  fo = FreezeOmniBaseline(model_path=...);  out = fo(session)
-    Streams the rendered wav through the model and records chunks where its state classifier
-    decides to speak. Fill the [VERIFY] calls against the repo's inference API.
+    Feeds the rendered mixed wav to Freeze-Omni's OFFLINE pipeline (bin/inference.py) in 160 ms /
+    2560-sample @16 kHz chunks and reads its chunk-level dialogue-state head each step. The head
+    returns stat=='ss' when it decides to START SPEAKING (state_1>0.5) — this is the model's
+    barge-in decision. We keep the model listening across the whole session (force stat back to
+    'cl') to record EVERY moment it would speak, then turn those onsets into nominal speak spans.
+
+    Run this in Freeze-Omni's OWN env (torch==2.2.0, transformers==4.45.2). Our mpfd package is
+    pure-numpy so it imports fine there.
+
+    Args:
+      fo_repo   : path to the cloned Freeze-Omni repo
+      model_path: --model_path (contains audiollm/{train.yaml,global_cmvn,final.pt})
+      llm_path  : --llm_path (frozen Qwen2-7B-Instruct)
     """
-    def __init__(self, model_path: str, chunk_ms: float = 80.0, device: str = "cuda"):
-        self.chunk_ms = chunk_ms
-        self.device = device
-        # [VERIFY] load Freeze-Omni exactly as in its inference script (encoder + frozen LLM + state head)
-        # from freeze_omni.inference import FreezeOmniPipeline
-        # self.pipe = FreezeOmniPipeline(model_path, device=device)
-        self.model_path = model_path
-        raise NotImplementedError(
-            "Wire FreezeOmniBaseline to the repo: load the model, then in __call__ feed audio chunks "
-            "and read the state classifier. See the docstring / docs/REAL_BASELINE.md.")
+    def __init__(self, fo_repo: str, model_path: str, llm_path: str,
+                 role: str = "You are a helpful assistant.",
+                 refractory_s: float = 1.5, resp_dur_s: float = 1.5,
+                 top_p: float = 0.8, top_k: int = 20, temperature: float = 0.8):
+        import sys, os, importlib.util
+        from types import SimpleNamespace
+        sys.path.insert(0, fo_repo)  # so `from models.pipeline import ...` resolves
+        spec = importlib.util.spec_from_file_location("fo_inference", os.path.join(fo_repo, "bin", "inference.py"))
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)  # defs only; run is under __main__
+        self._proc_cls = mod.audioEncoderProcessor
+        cfg = SimpleNamespace(model_path=model_path, llm_path=llm_path,
+                              top_p=top_p, top_k=top_k, temperature=temperature)
+        self.pipeline = mod.inferencePipeline(cfg)
+        self.role, self.refractory, self.resp_dur = role, refractory_s, resp_dur_s
 
     def __call__(self, session: Session) -> SystemOutput:
-        import soundfile as sf
+        import math, torch, soundfile as sf
         wav, sr = sf.read(session.audio_path)
-        if wav.ndim > 1:
+        if getattr(wav, "ndim", 1) > 1:
             wav = wav.mean(1)
-        hop = int(sr * self.chunk_ms / 1000)
-        speaking, seg, t0 = False, [], 0.0
-        for i in range(0, len(wav), hop):
-            chunk = wav[i:i + hop]
-            t = i / sr
-            # [VERIFY] state = self.pipe.step(chunk)  # -> one of {"listen","interrupt","respond"}
-            # For the benchmark we only need WHEN the agent produces/decides speech:
-            #   state in {"respond"} (or the model is currently generating audio) -> agent speaking
-            state = "listen"  # placeholder
-            is_speaking = state in ("respond",)
-            if is_speaking and not speaking:
-                speaking, t0 = True, t
-            elif not is_speaking and speaking:
-                speaking = False; seg.append((round(t0, 2), round(t, 2)))
-        if speaking:
-            seg.append((round(t0, 2), round(len(wav) / sr, 2)))
-        addr = {u.utt_id: True for u in session.utterances if u.speaker != session.agent_id}
+        wav = torch.tensor(wav).float()
+        if sr != 16000:
+            import torchaudio
+            wav = torchaudio.transforms.Resample(sr, 16000)(wav)
+        proc = self._proc_cls()
+        chunk = proc.get_chunk_size()                       # 2560 samples = 160 ms
+        n = math.ceil(wav.shape[0] / chunk) * chunk
+        buf = torch.zeros(n); buf[:wav.shape[0]] = wav
+
+        outputs = self.pipeline.speech_dialogue(None, stat='pre', role=self.role)
+        onsets = []
+        for idx, i in enumerate(range(0, n, chunk)):
+            fbank = proc.process(buf[i:i + chunk])
+            outputs = self.pipeline.speech_dialogue(fbank, **outputs)
+            if outputs.get('stat') == 'ss':                 # decided to START SPEAKING at this chunk
+                onsets.append(idx * 0.16)
+            outputs['stat'] = 'cl'                           # keep listening to probe the whole session
+
+        # merge onsets within the refractory window; each -> a nominal speaking span
+        seg, last = [], -1e9
+        for t in onsets:
+            if t - last >= self.refractory:
+                seg.append((round(t, 2), round(t + self.resp_dur, 2)))
+                last = t
+        addr = {u.utt_id: True for u in session.utterances if u.speaker != session.agent_id}  # dyadic: all "for me"
         return SystemOutput(session.session_id, agent_segments=seg, addressee_pred=addr)
 
 
-REAL_SYSTEMS = {"vad_dyadic": vad_dyadic_baseline}   # FreezeOmniBaseline added after wiring
+REAL_SYSTEMS = {"vad_dyadic": vad_dyadic_baseline}   # "freeze_omni" is constructed in 04_run_real
