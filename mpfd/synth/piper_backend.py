@@ -24,7 +24,7 @@ import numpy as np
 class PiperBackend:
     def __init__(self, voice_dir: str, piper_bin: str = "piper"):
         self.piper = piper_bin
-        self.models: List[str] = sorted(glob.glob(os.path.join(voice_dir, "*.onnx")))
+        self.models: List[str] = sorted(glob.glob(os.path.join(voice_dir, "**", "*.onnx"), recursive=True))
         if not self.models:
             raise RuntimeError(f"no *.onnx piper voices in {voice_dir} (download from rhasspy/piper-voices)")
         self._voice_map: Dict[str, str] = {}
