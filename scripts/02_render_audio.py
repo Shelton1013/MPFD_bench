@@ -15,10 +15,10 @@ from mpfd.schema import Session
 from mpfd.synth.compose import render_session
 
 
-def get_backend(name: str):
+def get_backend(name: str, model_dir: str = None):
     if name == "cosyvoice2":
         from mpfd.synth.cosyvoice_backend import CosyVoice2Backend
-        return CosyVoice2Backend()
+        return CosyVoice2Backend(model_dir) if model_dir else CosyVoice2Backend()
     raise SystemExit(f"unknown tts backend '{name}'")
 
 
@@ -26,12 +26,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sessions", default="data/synthetic")
     ap.add_argument("--out", default="data/rendered")
-    ap.add_argument("--tts", default="cosyvoice2")
+    ap.add_argument("--tts", default="cosyvoice2", help="backend NAME (not a path): cosyvoice2")
+    ap.add_argument("--model_dir", default=None,
+                    help="path to the TTS model, e.g. /abs/path/CosyVoice2-0.5B "
+                         "(default: pretrained_models/CosyVoice2-0.5B relative to CWD)")
     ap.add_argument("--noise_wav", default=None, help="optional background noise wav")
     ap.add_argument("--snr_db", type=float, default=20.0)
     args = ap.parse_args()
 
-    tts = get_backend(args.tts)
+    tts = get_backend(args.tts, args.model_dir)
     noise = None
     if args.noise_wav:
         import soundfile as sf
