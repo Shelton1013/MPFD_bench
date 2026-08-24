@@ -19,6 +19,11 @@ def get_backend(name: str, model_dir: str = None):
     if name == "cosyvoice2":
         from mpfd.synth.cosyvoice_backend import CosyVoice2Backend
         return CosyVoice2Backend(model_dir) if model_dir else CosyVoice2Backend()
+    if name == "piper":
+        from mpfd.synth.piper_backend import PiperBackend
+        if not model_dir:
+            raise SystemExit("--model_dir must point to a dir of piper *.onnx voices")
+        return PiperBackend(model_dir)
     raise SystemExit(f"unknown tts backend '{name}'")
 
 
