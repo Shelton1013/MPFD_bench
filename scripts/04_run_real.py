@@ -20,12 +20,15 @@ def main():
     ap.add_argument("--fo_repo", default=None, help="freeze_omni: path to cloned Freeze-Omni repo")
     ap.add_argument("--model_path", default=None, help="freeze_omni: --model_path (audiollm checkpoints)")
     ap.add_argument("--llm_path", default=None, help="freeze_omni: frozen Qwen2-7B-Instruct path")
+    ap.add_argument("--onset_cache", default=None, help="freeze_omni: dir to save raw speak onsets "
+                    "per session (so the P2 controller can gate them without re-running the model)")
     args = ap.parse_args()
 
     if args.pred == "freeze_omni":
         if not (args.fo_repo and args.model_path and args.llm_path):
             raise SystemExit("freeze_omni needs --fo_repo --model_path --llm_path")
-        system = FreezeOmniBaseline(args.fo_repo, args.model_path, args.llm_path)
+        system = FreezeOmniBaseline(args.fo_repo, args.model_path, args.llm_path,
+                                    onset_cache=args.onset_cache)
     elif args.pred in REAL_SYSTEMS:
         system = REAL_SYSTEMS[args.pred]
     else:

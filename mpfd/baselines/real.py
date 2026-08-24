@@ -99,8 +99,9 @@ class FreezeOmniBaseline:
     """
     def __init__(self, fo_repo: str, model_path: str, llm_path: str,
                  role: str = "You are a helpful assistant.",
-                 refractory_s: float = 1.5, resp_dur_s: float = 1.5,
+                 refractory_s: float = 1.5, resp_dur_s: float = 1.5, onset_cache: str = None,
                  top_p: float = 0.8, top_k: int = 20, temperature: float = 0.8):
+        self.onset_cache = onset_cache
         import sys, os, importlib.util, torch
         from types import SimpleNamespace
         # workaround for cuDNN "unable to find an engine to execute this computation" on the audio
@@ -139,6 +140,10 @@ class FreezeOmniBaseline:
                 onsets.append(idx * 0.16)
             outputs['stat'] = 'cl'                           # keep listening to probe the whole session
 
+        if self.onset_cache:  # save raw onsets so the P2 controller can gate them without re-running
+            import os, json
+            os.makedirs(self.onset_cache, exist_ok=True)
+            json.dump({"onsets": onsets}, open(os.path.join(self.onset_cache, f"{session.session_id}.json"), "w"))
         # merge onsets within the refractory window; each -> a nominal speaking span
         seg, last = [], -1e9
         for t in onsets:
