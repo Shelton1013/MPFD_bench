@@ -1,0 +1,12 @@
+# Core (CPU) — benchmark logic, schema, metrics, synthesis scripts
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12
+pyyaml>=6.0
+
+# Optional (server) — plug in for audio rendering / perception / models
+# torch>=2.1
+# torchaudio>=2.1
+# pyannote.audio>=3.1          # streaming diarization front-end
+# git+https://github.com/FunAudioLLM/CosyVoice.git   # multi-voice TTS for synthesis
+# jiwer>=3.0                    # WER for self-WER / ASR eval

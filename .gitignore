@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+data/synthetic/
+data/real/
+*.wav
+*.pt
+*.ckpt
+.venv/
+.DS_Store
