@@ -101,8 +101,12 @@ class FreezeOmniBaseline:
                  role: str = "You are a helpful assistant.",
                  refractory_s: float = 1.5, resp_dur_s: float = 1.5,
                  top_p: float = 0.8, top_k: int = 20, temperature: float = 0.8):
-        import sys, os, importlib.util
+        import sys, os, importlib.util, torch
         from types import SimpleNamespace
+        # workaround for cuDNN "unable to find an engine to execute this computation" on the audio
+        # encoder conv2d (version/bf16 mismatch). The audio encoder conv is tiny; Qwen has no conv.
+        torch.backends.cudnn.enabled = False
+        torch.backends.cudnn.benchmark = False
         sys.path.insert(0, fo_repo)  # so `from models.pipeline import ...` resolves
         spec = importlib.util.spec_from_file_location("fo_inference", os.path.join(fo_repo, "bin", "inference.py"))
         mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)  # defs only; run is under __main__
