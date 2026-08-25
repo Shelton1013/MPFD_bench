@@ -64,6 +64,7 @@ def main():
     ap.add_argument("--ami", default="data/ami", help="dir of AMI sessions from convert_ami.py")
     ap.add_argument("--out", default="data/injected")
     ap.add_argument("--model_dir", required=True, help="dir of piper *.onnx voices for the injected utterances")
+    ap.add_argument("--piper_bin", default="piper", help="piper CLI path if not on PATH (from `which piper`)")
     ap.add_argument("--per_session_agent", type=int, default=2)
     ap.add_argument("--per_session_human", type=int, default=2)
     ap.add_argument("--tier", default="mix", help="I0|I1|I2|sem|mix — implicitness of injected addressing")
@@ -74,7 +75,7 @@ def main():
     import soundfile as sf
     from mpfd.synth.piper_backend import PiperBackend
     G.load_paraphrases()                          # inject from the same (Qwen-expanded) phrase banks
-    tts = PiperBackend(args.model_dir)
+    tts = PiperBackend(args.model_dir, piper_bin=args.piper_bin)
     rng = random.Random(args.seed)
     tiers = ["I0", "I1", "I2", "sem"]
 
