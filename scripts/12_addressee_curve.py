@@ -54,6 +54,14 @@ def main():
             elif (not y) and pred: c["fp"] += 1
             else:               c["tn"] += 1
 
+    if not conf:
+        raise SystemExit(
+            f"\n[ERROR] 0 tagged addressing utterances found in {len(sessions)} sessions under "
+            f"'{args.sessions}'.\nThis dir has no graded (I0-I2) sessions — it is the old 9-cell "
+            f"data. Regenerate WITH graded, then rerun:\n"
+            f"  python scripts/01_generate_synth.py --out {args.sessions} --n_per_cell 50 --n_graded_per_tier 120\n"
+            f"  (session count should jump to ~810; addressee_graded/ subdir must exist)")
+
     print(f"\n=== addressee-F1 by implicitness tier  (addressee={args.addressee}, use_wakeword={uw}) ===")
     print(f"  {'tier':6s} {'F1':>6s} {'prec':>6s} {'rec':>6s} {'acc':>6s}  {'pos':>4s} {'neg':>4s}")
     for tier in sorted(conf):
