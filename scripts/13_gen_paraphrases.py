@@ -96,7 +96,23 @@ _THINK = re.compile(r"<think>.*?</think>", re.S)
 
 def _prompt(instruction, n):
     return (_SYS, f"generate {n} diverse variants of: {instruction}\n"
+                  f"VARY THE OPENING WORDS — do NOT enumerate one template with only the last word "
+                  f"changed (bad: 'and next week', 'and next month', 'and next step'). "
                   f"remember: one per line, lowercase, nothing else.")
+
+
+def diversify(items, max_per_prefix=5):
+    """Cap how many phrases share the same first two words, to kill template-enumeration clusters
+    (e.g. many 'display the ___' or 'and next ___'). Keeps labels intact — just prunes redundancy."""
+    from collections import defaultdict
+    seen = defaultdict(int)
+    out = []
+    for it in sorted(items):
+        pref = " ".join(it.replace("{name},", "").split()[:2])
+        if seen[pref] < max_per_prefix:
+            seen[pref] += 1
+            out.append(it)
+    return out
 
 
 def _lines(text):
@@ -148,6 +164,8 @@ def main():
     ap.add_argument("--temperature", type=float, default=0.9)
     ap.add_argument("--max_new_tokens", type=int, default=900)
     ap.add_argument("--only", default=None, help="comma-separated subset of categories to (re)generate")
+    ap.add_argument("--fresh", action="store_true", help="replace each category instead of merging with existing")
+    ap.add_argument("--max_per_prefix", type=int, default=5, help="cap phrases sharing the same first two words")
     args = ap.parse_args()
 
     model = tok = device = None
@@ -170,10 +188,10 @@ def main():
             raw = gen_vllm(args.base_url, args.model, instr, args.per_category, args.temperature,
                            args.max_new_tokens)
         kept = [v for v in (_valid(r, key) for r in raw) if v]
-        existing = [x for x in bank.get(cat, []) if isinstance(x, str)]
-        merged = sorted(set(existing) | set(kept))
+        existing = [] if args.fresh else [x for x in bank.get(cat, []) if isinstance(x, str)]
+        merged = diversify(set(existing) | set(kept), args.max_per_prefix)
         print(f"  {cat:14s} gen={len(raw):3d} valid={len(kept):3d} rejected={len(raw)-len(kept):3d} "
-              f"total={len(merged):3d}")
+              f"kept_after_diversify={len(merged):3d}")
         bank[cat] = merged
 
     json.dump(bank, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
