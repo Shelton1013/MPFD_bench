@@ -45,6 +45,24 @@ def test_oracle_perfect_on_graded_sessions():
     assert m["missed_response_rate"] == 0.0, m["missed_response_rate"]
 
 
+def test_response_over_real_speech_is_not_false_bargein():
+    """Track D: on real audio the agent's legitimate response to an addressed turn necessarily
+    overlaps ongoing human speech. That overlap must NOT count as a false barge-in (only speech
+    OUTSIDE any response window does)."""
+    utts = [
+        Utterance("q", "A", 5.0, 6.6, "what is on the agenda", addressee="Agent",
+                  is_for_agent=True, dialogue_act="question"),
+        Utterance("h", "B", 7.0, 9.0, "did you finish your part", addressee="A",
+                  is_for_agent=False, dialogue_act="question"),   # SILENT, starts inside the response window
+    ]
+    s = Session("inj", "injected", ["A", "B"], "Agent", utts)
+    # agent correctly answers q at 6.9 for 1.6s -> [6.9, 8.5] overlaps the silent 'h' span
+    out = SystemOutput("inj", agent_segments=[(6.9, 8.5)], addressee_pred={"q": True, "h": False})
+    raw = score_session(s, out)
+    assert sum(raw["false_bargein"]) == 0, "legit response over human speech wrongly flagged as barge-in"
+    assert sum(raw["responded"]) == 1
+
+
 def test_naive_dyadic_still_fails_loudly():
     """Sanity: the fixes must NOT make the broken dyadic baseline look good."""
     rng = random.Random(1)

@@ -218,7 +218,10 @@ Implemented in `mpfd/metrics.py`. Key robustness properties (regression-tested i
 `tests/test_metrics_oracle.py`):
 
 - **false_bargein_rate (FBR)** — over `SILENT` events: agent produced ≥50 ms of speech overlapping the
-  silent span. Headline over-speak axis.
+  silent span **that is not explained by a legitimate response window or the agent's own turn**.
+  Headline over-speak axis. The exclusion matters on real audio (Track D): the agent's correct response
+  to an addressed turn necessarily overlaps ongoing human speech, and that must not be scored as a
+  barge-in — only speech outside any response window counts.
 - **wrong_addressee_rate** — over question-like `SILENT` events: the agent **starts** speaking in the
   after-window `(end, end+RESPONSE_HORIZON]` **and that onset is NOT covered by a legitimate RESPOND
   window**. The exclusion makes it robust: a correct response to a *different, addressed* turn that

@@ -35,11 +35,28 @@ def score_session(session: Session, out: SystemOutput) -> Dict[str, List]:
     def _covered(t: float, windows: List[Tuple[float, float]]) -> bool:
         return any(a <= t <= b for a, b in windows)
 
+    def _illegit_speech(window: Tuple[float, float], min_dur: float = 0.05) -> bool:
+        """Agent speech overlapping `window` that is NOT explained by a legitimate response window
+        or the agent's own turn. This is what a false-barge-in actually is: the agent finishing a
+        valid response to an addressed turn (which, on real audio, necessarily overlaps ongoing
+        human speech) must NOT be counted as barging in on a silent span."""
+        total = 0.0
+        for s in seg:
+            lo, hi = max(s[0], window[0]), min(s[1], window[1])
+            if hi <= lo:
+                continue
+            covered = 0.0
+            for a, b in legit_windows:
+                clo, chi = max(lo, a), min(hi, b)
+                if chi > clo:
+                    covered += chi - clo
+            total += max(0.0, (hi - lo) - min(covered, hi - lo))
+        return total >= min_dur
+
     for e in ev:
-        agent_spoke = spoke_in(seg, (e.start, e.end))
         if e.action == Action.SILENT:
             raw["silent_total"].append(1)
-            raw["false_bargein"].append(1 if agent_spoke else 0)          # agent wrongly spoke during it
+            raw["false_bargein"].append(1 if _illegit_speech((e.start, e.end)) else 0)  # agent wrongly spoke
             if e.dialogue_act in ("question", "request"):
                 raw["qlike_silent_total"].append(1)
                 # "answered someone else's question" = the agent STARTS speaking in the window after it
