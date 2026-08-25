@@ -5,10 +5,15 @@ added for lexical variety. Output feeds the TTS/compose stage and the metrics ha
 """
 from __future__ import annotations
 
+import json
+import os
 import random
 from typing import List
 
 from ..schema import Session, Utterance
+
+DEFAULT_PARAPHRASES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "data", "paraphrases.json")
 
 # small content banks (kept simple; swap in an LLM for variety)
 Q_TO_AGENT = ["assistant, summarize the last point", "hey assistant, what time is the meeting",
@@ -23,6 +28,10 @@ THIRD = ["boarding for flight 204 is now open", "coffee is ready in the kitchen"
 
 
 def _u(i, spk, t0, dur, text, addressee=None, agent="Agent", da="statement"):
+    # named-vocative templates ("{name}, ...") are filled with the ADDRESSEE so the vocative always
+    # matches who the utterance is directed at (never the speaker addressing themselves).
+    if addressee and "{name}" in text:
+        text = text.replace("{name}", addressee)
     return Utterance(utt_id=f"u{i}", speaker=spk, start=round(t0, 2), end=round(t0 + dur, 2),
                      text=text, addressee=addressee, is_for_agent=(addressee == agent), dialogue_act=da)
 
@@ -53,6 +62,41 @@ HUMAN_Q_SEM = ["did you finish your part", "are you feeling better", "how was yo
 AGENT_PRIOR = ["here is a quick summary of the three points we discussed",
                "the two options are both on the slide now"]
 GRADED_TIERS = ("I0", "I1", "I2")
+
+
+def load_paraphrases(path: str = None) -> bool:
+    """Override the built-in phrase banks with an LLM-expandable JSON (data/paraphrases.json).
+    The addressee label is a property of the CATEGORY, so swapping in more variants never changes
+    gold labels. Missing keys keep their built-in defaults. Returns True if a file was loaded.
+
+    Call with path=None to auto-load DEFAULT_PARAPHRASES if it exists; path="" to force built-ins.
+    """
+    global Q_TO_AGENT, HUMAN_HUMAN, AGENT_LONG, BACKCH, THIRD
+    global AGENT_Q, HUMAN_Q, AGENT_Q_SEM, HUMAN_Q_SEM, AGENT_PRIOR, HUMAN_STMT
+    if path == "":
+        return False
+    p = path or DEFAULT_PARAPHRASES
+    if not os.path.exists(p):
+        return False
+    d = json.load(open(p, encoding="utf-8"))
+    g = lambda k, default: d[k] if (k in d and d[k]) else default
+    Q_TO_AGENT = g("agent_q_i0", Q_TO_AGENT)
+    HUMAN_HUMAN = [tuple(x) for x in g("human_pair", HUMAN_HUMAN)]
+    AGENT_LONG = g("agent_prior", AGENT_LONG)
+    AGENT_PRIOR = g("agent_prior", AGENT_PRIOR)
+    BACKCH = g("backchannel", BACKCH)
+    THIRD = g("third_party", THIRD)
+    AGENT_Q = {"I0": g("agent_q_i0", AGENT_Q["I0"]), "I1": g("agent_q_i1", AGENT_Q["I1"]),
+               "I2": g("agent_q_i2", AGENT_Q["I2"])}
+    HUMAN_Q = {"I0": g("human_q_i0", HUMAN_Q["I0"]), "I1": g("human_q_i1", HUMAN_Q["I1"]),
+               "I2": g("human_q_i2", HUMAN_Q["I2"])}
+    AGENT_Q_SEM = g("agent_q_sem", AGENT_Q_SEM)
+    HUMAN_Q_SEM = g("human_q_sem", HUMAN_Q_SEM)
+    HUMAN_STMT = g("human_stmt", HUMAN_STMT)
+    return True
+
+
+HUMAN_STMT = ["i think we should start with the smaller tasks", "the numbers looked fine"]
 
 
 def make_graded_session(idx: int, rng: random.Random, tier: str = "I0",

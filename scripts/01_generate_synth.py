@@ -7,7 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mpfd.cells import CELLS
-from mpfd.synth.generate_dialogues import GRADED_TIERS, make_graded_session, make_session
+from mpfd.synth.generate_dialogues import (DEFAULT_PARAPHRASES, GRADED_TIERS, load_paraphrases,
+                                           make_graded_session, make_session)
 
 
 def main():
@@ -16,9 +17,14 @@ def main():
     ap.add_argument("--n_per_cell", type=int, default=50)
     ap.add_argument("--n_graded_per_tier", type=int, default=80,
                     help="graded addressee-curve sessions per implicitness tier (0 to skip)")
+    ap.add_argument("--paraphrases", default=None,
+                    help=f"LLM-expandable phrase bank JSON (default: auto-load {DEFAULT_PARAPHRASES} "
+                         f"if present; pass '' to force the tiny built-in banks)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
+    loaded = load_paraphrases(args.paraphrases)
+    print(f"phrase bank: {'paraphrases.json' if loaded else 'built-in (tiny)'}")
     rng = random.Random(args.seed)
     n = 0
     for cell in CELLS:

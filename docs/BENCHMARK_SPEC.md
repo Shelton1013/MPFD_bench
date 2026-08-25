@@ -202,6 +202,14 @@ drop at I2 is the evidence that the addressee axis demands real inference, not k
 since staying silent and responding are both defensible — folding it into FBR/response would pollute
 the headline.)*
 
+**Lexical variety.** Track A wording comes from `data/paraphrases.json`, a per-speech-act phrase bank
+(the addressee label is a property of the CATEGORY, so any number of surface variants can be added
+without changing gold labels). It is expandable offline with a **local Qwen3** model
+(`scripts/13_gen_paraphrases.py`, no API), which generates variants per category under a lexical
+**validator** that rejects any generation violating the category invariant (wake-word present/absent,
+named vocative present/absent) — labels are enforced, not trusted. This removes the "the classifier
+just memorized ~30 templated strings" objection while keeping the clean synthetic labels.
+
 ---
 
 ## 6. Metric definitions (as implemented, timing-robust)
