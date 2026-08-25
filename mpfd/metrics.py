@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from .cells import gold_events
+from .cells import RESPONSE_HORIZON, gold_events
 from .schema import Action, GoldEvent, Session, SystemOutput, first_onset_after, spoke_in
 
 
@@ -24,6 +24,14 @@ def score_session(session: Session, out: SystemOutput) -> Dict[str, List]:
     seg = out.agent_segments
     raw = defaultdict(list)
 
+    # Windows in which the agent is LEGITIMATELY allowed to be speaking a response, so onsets there
+    # are not "answering someone else". Used to make wrong_addressee timing-robust: a correct
+    # response to an addressed turn must never be misattributed to a nearby human-directed question.
+    respond_windows = [(e.start, e.end) for e in ev if e.action == Action.RESPOND]
+
+    def _covered(t: float, windows: List[Tuple[float, float]]) -> bool:
+        return any(a <= t <= b for a, b in windows)
+
     for e in ev:
         agent_spoke = spoke_in(seg, (e.start, e.end))
         if e.action == Action.SILENT:
@@ -31,13 +39,19 @@ def score_session(session: Session, out: SystemOutput) -> Dict[str, List]:
             raw["false_bargein"].append(1 if agent_spoke else 0)          # agent wrongly spoke during it
             if e.dialogue_act in ("question", "request"):
                 raw["qlike_silent_total"].append(1)
-                # "answered someone else's question": responded in the window AFTER it ended
-                answered = first_onset_after(seg, e.end, horizon=3.0) is not None
+                # "answered someone else's question" = the agent STARTS speaking in the window after it
+                # ends, and that onset is NOT explained by a legitimate response to an addressed turn.
+                onsets_in = [s[0] for s in seg if e.end < s[0] <= e.end + RESPONSE_HORIZON]
+                answered = any(not _covered(o, respond_windows) for o in onsets_in)
                 raw["wrong_addressee"].append(1 if answered else 0)
         elif e.action == Action.RESPOND:
             raw["respond_total"].append(1)
+            # Timing-robust: the agent responded iff it produces speech anywhere in the response
+            # window (a fresh onset OR an already-running turn that spans into it). This avoids the
+            # onset-only undercount when a real model's response span is merged across e.start.
+            responded = spoke_in(seg, (e.start, e.end))
+            raw["responded"].append(1 if responded else 0)
             onset = first_onset_after(seg, e.start, horizon=e.end - e.start)
-            raw["responded"].append(1 if onset is not None else 0)
             if onset is not None:
                 raw["response_latency"].append(onset - e.start)
         elif e.action == Action.STOP:
@@ -90,6 +104,7 @@ def aggregate(sessions: List[Session], outs: Dict[str, SystemOutput]) -> Dict[st
         "false_bargein_rate": rate("false_bargein", "silent_total"),      # HEADLINE (lower better)
         "correct_silence_rate": (1 - rate("false_bargein", "silent_total")) if acc["silent_total"] else None,
         "correct_response_rate": rate("responded", "respond_total"),      # higher better
+        "missed_response_rate": (1 - rate("responded", "respond_total")) if acc["respond_total"] else None,  # 2D under-respond axis (lower better)
         "wrong_addressee_rate": rate("wrong_addressee", "qlike_silent_total"),
         "stop_success_rate": rate("stopped", "stop_total"),
         "continue_when_should_rate": rate("continued", "continue_total"),

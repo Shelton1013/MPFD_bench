@@ -29,8 +29,9 @@ def run(sessions: List[Session], system: Callable[[Session], SystemOutput],
 
 def print_report(m: Dict):
     keys = ["false_bargein_rate", "correct_silence_rate", "correct_response_rate",
-            "wrong_addressee_rate", "stop_success_rate", "continue_when_should_rate",
-            "mean_response_latency_s", "mean_stop_latency_s", "addressee_f1"]
+            "missed_response_rate", "wrong_addressee_rate", "stop_success_rate",
+            "continue_when_should_rate", "mean_response_latency_s", "mean_stop_latency_s",
+            "addressee_f1"]
     print(f"\n=== MPFD-Bench ({m['n_sessions']} sessions) ===")
     for k in keys:
         v = m.get(k)
