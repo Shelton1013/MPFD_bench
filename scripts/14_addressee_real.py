@@ -93,8 +93,14 @@ def main():
     # synthetic -> real
     if os.path.exists(args.addressee):
         clf = AddresseeClassifier.load(args.addressee)
-        F, P, R, acc = f1(list(clf.predict(Xva)), yva)
-        print(f"\n[synthetic->real]  F1={F:.3f} P={P:.3f} R={R:.3f} acc={acc:.3f}   (the sim2real gap)")
+        ndim = len(Xva[0]) if Xva else 0
+        if clf.mu is not None and len(clf.mu) != ndim:
+            print(f"\n[synthetic->real]  SKIPPED: {args.addressee} has {len(clf.mu)} features but current "
+                  f"code uses {ndim}. Retrain it with current code:\n"
+                  f"    python scripts/10_train_addressee.py --sessions data/synthetic --out {args.addressee}")
+        else:
+            F, P, R, acc = f1(list(clf.predict(Xva)), yva)
+            print(f"\n[synthetic->real]  F1={F:.3f} P={P:.3f} R={R:.3f} acc={acc:.3f}   (the sim2real gap)")
     else:
         print(f"\n[synthetic->real]  skipped ({args.addressee} not found)")
 
