@@ -9,10 +9,17 @@ validator (reject, don't trust) so a stray generation can't silently flip a labe
   human_q_i0  : must start with the literal template "{name}," (filled with the addressee at gen time)
   human_q_i1/i2/sem : NO wake-word, NO "{name}", no capitalized vocative (addressed to a human)
 
-Needs transformers>=4.51 for Qwen3 (the freeze-omni env's 4.45 is too old — use a fresh env), e.g.:
-  pip install "transformers>=4.51" accelerate torch
-  python scripts/13_gen_paraphrases.py --model Qwen/Qwen3-8B --per_category 80 --out data/paraphrases.json
-Faster alternative: serve with vLLM and point an OpenAI client at it (not required).
+Two backends:
+  --backend vllm (default): hit a running OpenAI-compatible server. Best for FP8 / large MoE models.
+    # serve a local model with vLLM (example: the FP8 MoE that fits 8xA6000):
+    vllm serve /home/share/data_makchen/peng/models/Qwen3.5-122B-A10B-FP8 \
+      --served-model-name qwen --tensor-parallel-size 8 --port 8000
+    # then generate:
+    python scripts/13_gen_paraphrases.py --backend vllm --model qwen \
+      --base_url http://localhost:8000/v1 --per_category 80 --out data/paraphrases.json
+  --backend hf: load with transformers (needs transformers>=4.51 for Qwen3; the freeze-omni env's
+    4.45 is too old — use a fresh env):
+    python scripts/13_gen_paraphrases.py --backend hf --model Qwen/Qwen3-8B --per_category 80
 """
 import argparse
 import json
@@ -81,28 +88,61 @@ def _valid(text, key):
     return t if not has_wake else None       # loose
 
 
-def generate(model, tok, instruction, n, temperature, max_new_tokens, device):
-    import torch
-    sys_p = ("you generate short spoken utterances for a multi-party meeting dataset. "
-             "output ONLY the utterances, one per line, all lowercase, no numbering, no quotes, "
-             "no commentary. keep the literal token {name} verbatim when the instruction uses it.")
-    user = f"generate {n} diverse variants of: {instruction}\nremember: one per line, lowercase, nothing else."
+_SYS = ("you generate short spoken utterances for a multi-party meeting dataset. "
+        "output ONLY the utterances, one per line, all lowercase, no numbering, no quotes, "
+        "no commentary. keep the literal token {name} verbatim when the instruction uses it.")
+_THINK = re.compile(r"<think>.*?</think>", re.S)
+
+
+def _prompt(instruction, n):
+    return (_SYS, f"generate {n} diverse variants of: {instruction}\n"
+                  f"remember: one per line, lowercase, nothing else.")
+
+
+def _lines(text):
+    text = _THINK.sub("", text)                       # drop any Qwen3 <think> block
+    return [ln for ln in (l.strip() for l in text.splitlines()) if ln]
+
+
+def gen_vllm(base_url, model, instruction, n, temperature, max_tokens):
+    """Talk to a vLLM (or any OpenAI-compatible) server. enable_thinking is disabled via
+    chat_template_kwargs when the server/model supports it (harmless otherwise)."""
+    import requests
+    sys_p, user = _prompt(instruction, n)
+    payload = {"model": model, "temperature": temperature, "top_p": 0.9, "max_tokens": max_tokens,
+               "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": user}],
+               "chat_template_kwargs": {"enable_thinking": False}}
+    r = requests.post(f"{base_url.rstrip('/')}/chat/completions",
+                      headers={"Authorization": "Bearer EMPTY"}, json=payload, timeout=1200)
+    if r.status_code == 400:                            # server rejected the extra kwarg -> retry plain
+        payload.pop("chat_template_kwargs", None)
+        r = requests.post(f"{base_url.rstrip('/')}/chat/completions",
+                          headers={"Authorization": "Bearer EMPTY"}, json=payload, timeout=1200)
+    r.raise_for_status()
+    return _lines(r.json()["choices"][0]["message"]["content"])
+
+
+def gen_hf(model, tok, instruction, n, temperature, max_new_tokens, device):
+    sys_p, user = _prompt(instruction, n)
     msgs = [{"role": "system", "content": sys_p}, {"role": "user", "content": user}]
     try:   # Qwen3 hybrid models accept enable_thinking; instruct-only (e.g. -Instruct-2507) do not
-        text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
-                                       enable_thinking=False)
+        text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False)
     except TypeError:
         text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
     inputs = tok(text, return_tensors="pt").to(device)
     out = model.generate(**inputs, do_sample=True, temperature=temperature, top_p=0.9,
                          max_new_tokens=max_new_tokens, pad_token_id=tok.eos_token_id)
-    gen = tok.decode(out[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    return [ln for ln in (l.strip() for l in gen.splitlines()) if ln]
+    return _lines(tok.decode(out[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="Qwen/Qwen3-8B")
+    ap.add_argument("--backend", default="vllm", choices=["vllm", "hf"],
+                    help="vllm = hit a running OpenAI-compatible server (default); hf = load with transformers")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B",
+                    help="hf: HF id or local path. vllm: the served model NAME (vLLM --served-model-name, "
+                         "or the model path you launched vLLM with)")
+    ap.add_argument("--base_url", default="http://localhost:8000/v1", help="vllm: OpenAI-compatible endpoint")
     ap.add_argument("--out", default="data/paraphrases.json")
     ap.add_argument("--per_category", type=int, default=80)
     ap.add_argument("--temperature", type=float, default=0.9)
@@ -110,18 +150,25 @@ def main():
     ap.add_argument("--only", default=None, help="comma-separated subset of categories to (re)generate")
     args = ap.parse_args()
 
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    print(f"loading {args.model} ...")
-    tok = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype="auto", device_map="auto")
-    device = model.device
+    model = tok = device = None
+    if args.backend == "hf":
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        print(f"loading {args.model} with transformers ...")
+        tok = AutoTokenizer.from_pretrained(args.model)
+        model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype="auto", device_map="auto")
+        device = model.device
+    else:
+        print(f"backend=vllm  endpoint={args.base_url}  model={args.model}")
 
     bank = json.load(open(args.out, encoding="utf-8")) if os.path.exists(args.out) else {}
     cats = args.only.split(",") if args.only else list(SPECS)
     for cat in cats:
         instr, key = SPECS[cat]
-        raw = generate(model, tok, instr, args.per_category, args.temperature, args.max_new_tokens, device)
+        if args.backend == "hf":
+            raw = gen_hf(model, tok, instr, args.per_category, args.temperature, args.max_new_tokens, device)
+        else:
+            raw = gen_vllm(args.base_url, args.model, instr, args.per_category, args.temperature,
+                           args.max_new_tokens)
         kept = [v for v in (_valid(r, key) for r in raw) if v]
         existing = [x for x in bank.get(cat, []) if isinstance(x, str)]
         merged = sorted(set(existing) | set(kept))
