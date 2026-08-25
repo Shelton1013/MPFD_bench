@@ -27,6 +27,71 @@ def _u(i, spk, t0, dur, text, addressee=None, agent="Agent", da="statement"):
                      text=text, addressee=addressee, is_for_agent=(addressee == agent), dialogue_act=da)
 
 
+# --- graded addressing banks (Track A). Each session carries one agent-addressed question
+#     (POSITIVE) + one human-addressed question (NEGATIVE), realized at increasing implicitness so
+#     addressee-F1 degrades along I0->I2 (see docs/BENCHMARK_SPEC.md §5.2):
+#       I0 explicit   : explicit lexical marker — wake-word (agent) / vocative name (human). Regex-solvable.
+#       I1 vocative-dropped : marker removed; conversational POSITION (prev speaker) still reveals it.
+#       I2 contextual : HALF supportive-position, HALF misleading-position where the addressee is only
+#                       recoverable from CONTENT (agent-answerable vs personal-to-a-human). Neither a
+#                       wake-word regex nor a shallow "who spoke last" cue suffices -> real inference.
+AGENT_Q = {  # agent-addressed, position-cued (follows the agent's own turn)
+    "I0": ["assistant, summarize the last point", "assistant, what time is the sync",
+           "hey assistant, send the notes"],
+    "I1": ["could you summarize the last point", "what time is the sync", "please send the notes"],
+    "I2": ["can you expand on that", "what about the second one", "why is that", "go on"],
+}
+HUMAN_Q = {  # human-addressed, position-cued (follows a human turn)
+    "I0": ["Bob, did you send the report", "Bob, are you joining the call"],
+    "I1": ["did you send the report", "are you joining the call"],
+    "I2": ["and then what happened", "did you tell her yet"],
+}
+# I2 MISLEADING pool: addressee defensible by CONTENT alone, while conversational position lies.
+AGENT_Q_SEM = ["what is on the agenda", "pull up the notes", "what did we decide last time",
+               "how much time is left"]                                  # only the agent answers these
+HUMAN_Q_SEM = ["did you finish your part", "are you feeling better", "how was your weekend"]  # personal to a human
+AGENT_PRIOR = ["here is a quick summary of the three points we discussed",
+               "the two options are both on the slide now"]
+GRADED_TIERS = ("I0", "I1", "I2")
+
+
+def make_graded_session(idx: int, rng: random.Random, tier: str = "I0",
+                        speakers=("Alice", "Bob"), agent="Agent") -> Session:
+    """One session for the addressee-difficulty CURVE. The agent-addressed (POSITIVE) and human-
+    addressed (NEGATIVE) questions are tagged with `implicitness=tier` so 12_addressee_curve.py can
+    bucket addressee-F1 by tier. utt_ids are made session-unique (prefixed) so downstream tagging
+    never collides across sessions."""
+    A, B = speakers[0], speakers[1]
+    us: List[Utterance] = []
+    t = [round(rng.uniform(0.3, 0.8), 2)]
+    sid = f"addressee_graded_{tier}_{idx:04d}"
+
+    def add(spk, dur, text, addr, da, tag=False):
+        u = _u(len(us), spk, t[0], dur, text, addr, agent, da)
+        u.utt_id = f"{sid}_u{len(us)}"           # session-unique id (avoid cross-session tag collisions)
+        if tag:
+            u.implicitness = tier
+        us.append(u)
+        t[0] = round(t[0] + dur + 0.35 + rng.uniform(-0.1, 0.2), 2)
+
+    misleading = (tier == "I2" and rng.random() < 0.5)
+    if not misleading:
+        # supportive position: human topic, human-Q(neg, after human), agent turn, agent-Q(pos, after agent)
+        add(A, 1.5, rng.choice(HUMAN_HUMAN)[0], B, "statement")
+        add(B, 1.5, rng.choice(HUMAN_Q[tier]), A, "question", tag=True)          # NEGATIVE
+        add(agent, 2.2, rng.choice(AGENT_PRIOR), A, "statement")
+        add(A, 1.6, rng.choice(AGENT_Q[tier]), agent, "question", tag=True)       # POSITIVE
+    else:
+        # misleading position: neg follows the agent turn, pos follows a human turn; label from CONTENT
+        add(agent, 2.2, rng.choice(AGENT_PRIOR), A, "statement")
+        add(B, 1.6, rng.choice(HUMAN_Q_SEM), A, "question", tag=True)             # NEGATIVE, prev=agent (lies)
+        add(A, 1.5, rng.choice(HUMAN_HUMAN)[1], B, "statement")
+        add(B, 1.6, rng.choice(AGENT_Q_SEM), agent, "question", tag=True)         # POSITIVE, prev=human (lies)
+
+    return Session(session_id=sid, cell="addressee_graded",
+                   speakers=list(speakers), agent_id=agent, utterances=us)
+
+
 def make_session(cell: str, idx: int, rng: random.Random,
                  speakers=("Alice", "Bob"), agent="Agent") -> Session:
     A, B = speakers[0], speakers[1]

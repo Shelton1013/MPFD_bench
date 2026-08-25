@@ -183,17 +183,24 @@ probe). Yields a **reproducible protocol** turning any human meeting corpus into
 ### 5.2 Implicitness tiers I0–I3 (Track A) — NOT the survey's L-axis
 
 The addressing-difficulty axis, deliberately named **I** (Implicitness) to avoid colliding with the
-survey's mechanism **L**-axis:
+survey's mechanism **L**-axis. Each graded session carries one agent-addressed question (positive) and
+one human-addressed question (negative), realized at the tier's difficulty; `12_addressee_curve.py`
+buckets addressee-F1 by tier.
 
-| Tier | Addressing | Correct agent behavior |
+| Tier | How the addressee is signalled | Cue needed to resolve it |
 |---|---|---|
-| **I0** explicit | wake-word: "assistant, …" | respond (calibration floor only) |
-| **I1** named-to-human | "Bob, did you send it?" | **stay silent** |
-| **I2** implicit / contextual | no name; inferred from QA adjacency / topic continuity | the real test |
-| **I3** group / ambiguous | "what does everyone think?" | policy question (hedge / selective) |
+| **I0** explicit | wake-word ("assistant, …") / vocative name ("Bob, …") | a **regex** on markers |
+| **I1** vocative-dropped | marker removed; conversational **position** still reveals it (agent-Q follows the agent's turn) | a "who spoke last" context feature |
+| **I2** contextual | half supportive-position, **half misleading-position** where the addressee is recoverable only from **content** (agent-answerable "what's on the agenda" vs. personal-to-a-human "did you finish your part") | genuine **inference** — neither a marker regex nor "who spoke last" suffices |
+| **I3** group / ambiguous *(deferred)* | "what does everyone think?" | policy question (hedge / selective); reported separately, `addressee="group"` |
 
-The headline for ② becomes **addressee-F1 as a function of I0→I3**, which structurally defeats the
-"a regex solves it" critique (I0 alone is a regex; I2/I3 are not).
+The headline for ② is **addressee-F1 as a function of I0→I2**, which structurally defeats the
+"a regex solves it" critique. Observed with the v1 lexical+context logistic-regression baseline
+(balanced 120/120 per tier): **I0 = 1.00, I1 = 1.00, I2 = 0.76** (oracle = 1.00 at every tier). The
+drop at I2 is the evidence that the addressee axis demands real inference, not keyword matching.
+*(I3 is deferred to a follow-up: it needs a schema path for group addressing and its own scoring,
+since staying silent and responding are both defensible — folding it into FBR/response would pollute
+the headline.)*
 
 ---
 

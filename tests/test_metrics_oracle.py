@@ -15,7 +15,7 @@ from mpfd.baselines import naive_dyadic_system, oracle_system
 from mpfd.cells import CELLS
 from mpfd.metrics import aggregate, score_session
 from mpfd.schema import Session, SystemOutput, Utterance
-from mpfd.synth.generate_dialogues import make_session
+from mpfd.synth.generate_dialogues import GRADED_TIERS, make_graded_session, make_session
 
 
 def _agg(sessions, system):
@@ -31,6 +31,18 @@ def test_oracle_perfect_on_clean_synthetic():
     assert m["missed_response_rate"] == 0.0, m["missed_response_rate"]
     assert m["correct_response_rate"] == 1.0
     assert m["addressee_f1"] == 1.0
+
+
+def test_oracle_perfect_on_graded_sessions():
+    """Graded sessions put the agent's own turn right after a human-directed question; the agent's
+    legitimate turn onset lands in that question's after-window. Oracle must still read 0 wrong-
+    addressee (regression for the agent-own-turn exclusion)."""
+    rng = random.Random(2)
+    sessions = [make_graded_session(i, rng, tier=t) for t in GRADED_TIERS for i in range(30)]
+    m = _agg(sessions, oracle_system)
+    assert m["false_bargein_rate"] == 0.0, m["false_bargein_rate"]
+    assert m["wrong_addressee_rate"] == 0.0, m["wrong_addressee_rate"]
+    assert m["missed_response_rate"] == 0.0, m["missed_response_rate"]
 
 
 def test_naive_dyadic_still_fails_loudly():

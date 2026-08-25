@@ -7,13 +7,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mpfd.cells import CELLS
-from mpfd.synth.generate_dialogues import make_session
+from mpfd.synth.generate_dialogues import GRADED_TIERS, make_graded_session, make_session
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="data/synthetic")
     ap.add_argument("--n_per_cell", type=int, default=50)
+    ap.add_argument("--n_graded_per_tier", type=int, default=80,
+                    help="graded addressee-curve sessions per implicitness tier (0 to skip)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -26,9 +28,21 @@ def main():
             s = make_session(cell, i, rng)
             open(os.path.join(d, f"{s.session_id}.json"), "w", encoding="utf-8").write(s.to_json())
             n += 1
-    print(f"wrote {n} sessions across {len(CELLS)} cells to {args.out}")
-    print("next: render audio with mpfd.synth.compose (server, TTS), or score directly:")
-    print("  python scripts/03_score.py --sessions", args.out, "--pred naive_dyadic")
+    # Track A graded addressee-difficulty sessions (I0->I2) for the addressee-F1 curve
+    ng = 0
+    if args.n_graded_per_tier > 0:
+        d = os.path.join(args.out, "addressee_graded")
+        os.makedirs(d, exist_ok=True)
+        for tier in GRADED_TIERS:
+            for i in range(args.n_graded_per_tier):
+                s = make_graded_session(i, rng, tier=tier)
+                open(os.path.join(d, f"{s.session_id}.json"), "w", encoding="utf-8").write(s.to_json())
+                ng += 1
+    print(f"wrote {n} sessions across {len(CELLS)} cells + {ng} graded sessions "
+          f"({len(GRADED_TIERS)} tiers) to {args.out}")
+    print("next: addressee-F1 curve (CPU):")
+    print(f"  python scripts/10_train_addressee.py --sessions {args.out} --out addressee.json")
+    print(f"  python scripts/12_addressee_curve.py --sessions {args.out} --addressee addressee.json")
 
 
 if __name__ == "__main__":

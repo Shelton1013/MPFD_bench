@@ -24,10 +24,13 @@ def score_session(session: Session, out: SystemOutput) -> Dict[str, List]:
     seg = out.agent_segments
     raw = defaultdict(list)
 
-    # Windows in which the agent is LEGITIMATELY allowed to be speaking a response, so onsets there
-    # are not "answering someone else". Used to make wrong_addressee timing-robust: a correct
-    # response to an addressed turn must never be misattributed to a nearby human-directed question.
-    respond_windows = [(e.start, e.end) for e in ev if e.action == Action.RESPOND]
+    # Windows in which the agent is LEGITIMATELY speaking, so a speech onset there is NOT "answering
+    # someone else": (a) response windows for addressed turns, and (b) the agent's own scripted
+    # turns (it is holding the floor). Excluding both makes wrong_addressee timing-robust — a
+    # correct response, or the agent's own turn, that happens to start inside a human-directed
+    # question's after-window must never be misattributed as answering that question.
+    legit_windows = [(e.start, e.end) for e in ev if e.action == Action.RESPOND]
+    legit_windows += [(u.start, u.end) for u in session.utterances if u.speaker == session.agent_id]
 
     def _covered(t: float, windows: List[Tuple[float, float]]) -> bool:
         return any(a <= t <= b for a, b in windows)
@@ -42,7 +45,7 @@ def score_session(session: Session, out: SystemOutput) -> Dict[str, List]:
                 # "answered someone else's question" = the agent STARTS speaking in the window after it
                 # ends, and that onset is NOT explained by a legitimate response to an addressed turn.
                 onsets_in = [s[0] for s in seg if e.end < s[0] <= e.end + RESPONSE_HORIZON]
-                answered = any(not _covered(o, respond_windows) for o in onsets_in)
+                answered = any(not _covered(o, legit_windows) for o in onsets_in)
                 raw["wrong_addressee"].append(1 if answered else 0)
         elif e.action == Action.RESPOND:
             raw["respond_total"].append(1)

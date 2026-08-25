@@ -33,6 +33,7 @@ class Utterance:
     addressee: Optional[str] = None   # who this utterance is directed at (speaker label / "agent" / "group")
     is_for_agent: bool = False        # convenience: addressee == the agent
     dialogue_act: str = "statement"   # statement / question / request / backchannel / ...
+    implicitness: Optional[str] = None  # addressing-difficulty tier for the curve: I0/I1/I2/I3 (None = untagged)
 
 
 @dataclass
