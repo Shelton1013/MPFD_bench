@@ -88,8 +88,11 @@ def generate(model, tok, instruction, n, temperature, max_new_tokens, device):
              "no commentary. keep the literal token {name} verbatim when the instruction uses it.")
     user = f"generate {n} diverse variants of: {instruction}\nremember: one per line, lowercase, nothing else."
     msgs = [{"role": "system", "content": sys_p}, {"role": "user", "content": user}]
-    text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
-                                   enable_thinking=False)          # Qwen3: no thinking for this task
+    try:   # Qwen3 hybrid models accept enable_thinking; instruct-only (e.g. -Instruct-2507) do not
+        text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
+                                       enable_thinking=False)
+    except TypeError:
+        text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
     inputs = tok(text, return_tensors="pt").to(device)
     out = model.generate(**inputs, do_sample=True, temperature=temperature, top_p=0.9,
                          max_new_tokens=max_new_tokens, pad_token_id=tok.eos_token_id)
