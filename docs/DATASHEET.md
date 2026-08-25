@@ -92,18 +92,31 @@ labels for both the over-speak and under-respond halves, from any human meeting 
 | naive_dyadic | 0.841 | 0.000 | 0.994 | 1.000 | 0.022 |
 | vad_dyadic | 0.675 | 0.022 | 0.876 | 0.978 | 0.022 |
 | **controller (oracle addressee)** | **0.008** | **0.022** | 0.034 | 0.978 | 1.000 |
-| controller (trained addressee) | 0.007 | 0.667 | 0.023 | 0.333 | 0.500 |
+| controller (synthetic-trained addressee) | 0.007 | 0.667 | 0.023 | 0.333 | — |
+| controller (real-trained addressee) | 0.427 | 0.111 | 0.475 | 0.889 | — |
 
 **Track A (addressee-F1 vs implicitness, trained lexical+context LR, balanced):** I0 = 1.00, I1 = 1.00,
 **I2 = 0.51 (≈ chance)**; oracle = 1.00 at every tier. **Track B (real AMI, human-only):** Freeze-Omni
-FBR ≈ 0.896.
+FBR ≈ 0.896. **Track C (real AMI addressee, single-vs-group, meeting-split):** a synthetic-trained
+classifier scores **F1 = 0.108** on real addressing (near-useless — the sim2real gap); retrained on
+real AMI it reaches **F1 = 0.681** — better than chance but far from solved (the text-only ceiling,
+consistent with GPT-4o being near-chance on AMI addressee, arXiv:2606.17542).
 
 **The story the numbers tell.** (1) Real SOTA full-duplex collapses in real multi-party (FBR 0.9). (2)
-The addressee-gating method is sound: with correct addressee it reaches the ideal corner (FBR 0.008,
-miss 0.022). (3) The gap between oracle-gate (miss 0.02) and trained-gate (miss 0.67) is **entirely**
-the addressee classifier failing to transfer from synthetic to real AMI text (F1 0.5 vs 1.0). (4) The
-addressee task is not a keyword regex: on the graded curve a strong lexical+context baseline drops to
-chance at I2.
+The addressee-gating method is sound *in principle*: with a **perfect** addressee it reaches the ideal
+corner (FBR 0.008, miss 0.022). (3) But **text-only addressee has a hard ceiling.** A synthetic-trained
+classifier is near-useless on real speech (Track C F1 0.108) → the controller is over-conservative
+(FBR 0.007 / miss 0.667). Retraining on real AMI addressee (F1 0.681) does not reach the oracle corner;
+it slides *along a tradeoff frontier* (FBR 0.427 / miss 0.111) — trading over-speaking for
+under-responding — because "directed at the agent" and "directed at another person" are linguistically
+near-identical. (4) The addressee task is not a keyword regex: on the graded synthetic curve a strong
+lexical+context baseline drops to chance at I2.
+
+**Core finding / open problem defined by MPFD-Bench:** multi-party addressee-gating works given the
+addressee, but resolving the addressee from audio/text alone is bounded well away from the ideal
+corner. Closing it needs information beyond text — role grounding (what the agent can do), explicit
+address, or multimodality. The 2D frontier (synthetic-gate → real-gate → oracle-gate) quantifies
+exactly how far current addressee inference is from sufficient.
 
 ---
 

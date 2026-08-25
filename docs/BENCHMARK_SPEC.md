@@ -149,9 +149,22 @@ Reported axes: `false_bargein_rate` (+ `wrong_addressee_rate`) vs. `missed_respo
 ### 4.1 Ablations (attribute the failure)
 
 1. **oracle-WHO vs. real diarizer** — proves failure is *addressee reasoning*, not *hearing who spoke*
-   (removes WHO as a confound).
+   (removes WHO as a confound). *(pending — no diarization frontend wired.)*
 2. **oracle-addressee vs. predicted-addressee** — splits ACT failure into ② (addressee wrong) vs.
-   ③ (floor control wrong).
+   ③ (floor control wrong). **Measured (Track D, real audio):** the addressee source moves the
+   controller across the 2D — oracle **(FBR 0.008, miss 0.022)**, real-trained **(0.427, 0.111)**,
+   synthetic-trained **(0.007, 0.667)**.
+
+### 4.2 Core finding — the text-only addressee ceiling
+
+Gating **works given the addressee** (oracle reaches the ideal corner). But resolving the addressee
+from audio/text alone is bounded far from it: on real AMI addressing a synthetic-trained classifier
+is near-useless (F1 0.108) and even a real-trained one tops out at F1 0.681, so the controller can only
+*slide along a FBR↔miss tradeoff frontier*, never reaching (low, low). "Addressed to the agent" and
+"addressed to another person" are linguistically near-identical (cf. GPT-4o near-chance on AMI
+addressee, arXiv:2606.17542). **MPFD-Bench's contribution is to define and quantify this open problem**:
+closing the frontier-to-oracle gap needs information beyond text — role grounding, explicit address, or
+multimodality.
 
 ---
 
