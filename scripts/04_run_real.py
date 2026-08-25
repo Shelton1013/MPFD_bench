@@ -35,6 +35,9 @@ def main():
         raise SystemExit(f"unknown real system '{args.pred}'; available: {list(REAL_SYSTEMS)} + freeze_omni")
 
     sessions = load_sessions(args.sessions)
+    if not sessions:
+        raise SystemExit(f"0 sessions found under {os.path.abspath(args.sessions)} — check the path "
+                         f"(injected sessions are written to <out>/injected/; use that exact dir)")
     missing = [s.session_id for s in sessions if not s.audio_path]
     if missing:
         raise SystemExit(f"{len(missing)} sessions have no audio_path — run 02_render_audio.py first")

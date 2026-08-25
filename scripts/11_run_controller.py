@@ -39,6 +39,8 @@ def main():
     system = MPFDController(provider, addressee, use_wakeword=not args.no_wakeword)
 
     sessions = load_sessions(args.sessions)
+    if not sessions:
+        raise SystemExit(f"0 sessions found under {os.path.abspath(args.sessions)} — check the path")
     print(f"loaded {len(sessions)} sessions; controller onsets={args.onsets} addressee={args.addressee}")
     print_report(run(sessions, system))
 
