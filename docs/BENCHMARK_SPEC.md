@@ -152,8 +152,8 @@ Reported axes: `false_bargein_rate` (+ `wrong_addressee_rate`) vs. `missed_respo
    (removes WHO as a confound). *(pending — no diarization frontend wired.)*
 2. **oracle-addressee vs. predicted-addressee** — splits ACT failure into ② (addressee wrong) vs.
    ③ (floor control wrong). **Measured (Track D, real audio):** the addressee source moves the
-   controller across the 2D — oracle **(FBR 0.008, miss 0.022)**, real-trained **(0.427, 0.111)**,
-   synthetic-trained **(0.007, 0.667)**.
+   controller across the 2D (328 sessions) — oracle **(FBR 0.015, miss 0.007)**, real-trained
+   **(0.389, 0.119)**, synthetic-trained **(0.007, 0.667)**.
 
 ### 4.2 Core finding — the text-only addressee ceiling
 

@@ -45,7 +45,7 @@ track states its scope.
 |---|---|---|---|---|
 | **A — synthetic** | TTS (or symbolic) | clean, by construction | 9 behavioral cells × N + graded I0–I2 × N | Diagnostic; the addressee **difficulty curve**. Scope: templated language, TTS acoustics. |
 | **B — AMI real** | real meeting audio | human-only ⇒ agent must stay silent | AMI windows | Real-acoustics **FBR anchor**. Scope: over-speak half only; no response events; no real addressee labels. |
-| **D — injected real** | real AMI + spliced TTS | clean for injected events | 115 (this release) | Real acoustics + clean labels for **both** halves via the injection protocol (§4.3). |
+| **D — injected real** | real AMI + spliced TTS | clean for injected events | 328 (10 meetings) | Real acoustics + clean labels for **both** halves via the injection protocol (§4.3). |
 
 **Cells (Track A):** inter_human, overlapping_humans, addressed_turn, addressee_switch,
 wrong_addressee, addressed_bargein, nonaddressing_overlap, backchannel, third_party — each exposes a
@@ -83,17 +83,18 @@ labels for both the over-speak and under-respond halves, from any human meeting 
 
 ## 5. Baselines and headline results (this release)
 
-**Track D (115 injected sessions, real Freeze-Omni onsets; 2D = FBR / miss):**
+**Track D (328 injected sessions, 10 AMI meetings, real Freeze-Omni onsets; 2D = FBR / miss;
+95% bootstrap CIs: FBR ±≤0.012, miss ±≤0.06):**
 
 | system | FBR↓ | miss↓ | wrongAddr↓ | resp↑ | addrF1↑ |
 |---|---|---|---|---|---|
 | oracle (sanity) | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 |
-| freeze_omni_raw (real SOTA) | 0.915 | 0.000 | 0.960 | 1.000 | 0.022 |
-| naive_dyadic | 0.841 | 0.000 | 0.994 | 1.000 | 0.022 |
-| vad_dyadic | 0.675 | 0.022 | 0.876 | 0.978 | 0.022 |
-| **controller (oracle addressee)** | **0.008** | **0.022** | 0.034 | 0.978 | 1.000 |
+| freeze_omni_raw (real SOTA) | 0.893 | 0.000 | 0.949 | 1.000 | 0.030 |
+| naive_dyadic | 0.807 | 0.000 | 0.996 | 1.000 | 0.030 |
+| vad_dyadic | 0.680 | 0.007 | 0.880 | 0.993 | 0.030 |
+| **controller (oracle addressee)** | **0.015** | **0.007** | 0.017 | 0.993 | 1.000 |
 | controller (synthetic-trained addressee) | 0.007 | 0.667 | 0.023 | 0.333 | — |
-| controller (real-trained addressee) | 0.427 | 0.111 | 0.475 | 0.889 | — |
+| controller (real-trained addressee) | 0.389 | 0.119 | 0.521 | 0.881 | — |
 
 **Track A (addressee-F1 vs implicitness, trained lexical+context LR, balanced):** I0 = 1.00, I1 = 1.00,
 **I2 = 0.51 (≈ chance)**; oracle = 1.00 at every tier. **Track B (real AMI, human-only):** Freeze-Omni
@@ -104,10 +105,10 @@ consistent with GPT-4o being near-chance on AMI addressee, arXiv:2606.17542).
 
 **The story the numbers tell.** (1) Real SOTA full-duplex collapses in real multi-party (FBR 0.9). (2)
 The addressee-gating method is sound *in principle*: with a **perfect** addressee it reaches the ideal
-corner (FBR 0.008, miss 0.022). (3) But **text-only addressee has a hard ceiling.** A synthetic-trained
+corner (FBR 0.015, miss 0.007). (3) But **text-only addressee has a hard ceiling.** A synthetic-trained
 classifier is near-useless on real speech (Track C F1 0.108) → the controller is over-conservative
 (FBR 0.007 / miss 0.667). Retraining on real AMI addressee (F1 0.681) does not reach the oracle corner;
-it slides *along a tradeoff frontier* (FBR 0.427 / miss 0.111) — trading over-speaking for
+it slides *along a tradeoff frontier* (FBR 0.389 / miss 0.119) — trading over-speaking for
 under-responding — because "directed at the agent" and "directed at another person" are linguistically
 near-identical. (4) The addressee task is not a keyword regex: on the graded synthetic curve a strong
 lexical+context baseline drops to chance at I2.
@@ -116,12 +117,12 @@ lexical+context baseline drops to chance at I2.
 
 | thresh | 0.10 | 0.30 | 0.50 | 0.60 | 0.70 | 0.80 | 0.90 | oracle |
 |---|---|---|---|---|---|---|---|---|
-| FBR | 0.810 | 0.625 | 0.427 | 0.265 | 0.049 | 0.022 | 0.009 | **0.008** |
-| miss | 0.000 | 0.000 | 0.111 | 0.222 | 0.422 | 0.511 | 0.778 | **0.022** |
+| FBR | 0.765 | 0.561 | 0.389 | 0.248 | 0.060 | 0.032 | 0.015 | **0.015** |
+| miss | 0.000 | 0.007 | 0.119 | 0.210 | 0.517 | 0.636 | 0.860 | **0.007** |
 
-No threshold approaches the oracle corner: at matched low FBR (≈0.009) the gate's miss is 0.78 vs
-oracle's 0.02; at matched low miss (≈0) its FBR is 0.6–0.8 vs oracle's 0.008; the closest balanced
-point (0.265, 0.222) is ~0.35 from the origin while oracle is ~0.02. The whole frontier is bowed an
+No threshold approaches the oracle corner: at matched low FBR (≈0.015) the gate's miss is 0.86 vs
+oracle's 0.007; at matched low miss (≈0) its FBR is 0.6–0.77 vs oracle's 0.015; the closest balanced
+point (0.248, 0.210) is ~0.32 from the origin while oracle is ~0.017. The whole frontier is bowed an
 order of magnitude away from the ideal corner — the cost of imperfect addressee inference.
 
 **Core finding / open problem defined by MPFD-Bench:** multi-party addressee-gating works given the
