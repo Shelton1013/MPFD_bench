@@ -22,6 +22,9 @@ def main():
     ap.add_argument("--llm_path", default=None, help="freeze_omni: frozen Qwen2-7B-Instruct path")
     ap.add_argument("--onset_cache", default=None, help="freeze_omni: dir to save raw speak onsets "
                     "per session (so the P2 controller can gate them without re-running the model)")
+    ap.add_argument("--shard", default=None, help="k/N: process only session subset k-of-N (for "
+                    "multi-GPU parallelism). Per-session onset caches from all shards merge in the "
+                    "same --onset_cache dir; run 30_run_all on the full set afterwards.")
     args = ap.parse_args()
 
     if args.pred == "freeze_omni":
@@ -38,6 +41,10 @@ def main():
     if not sessions:
         raise SystemExit(f"0 sessions found under {os.path.abspath(args.sessions)} — check the path "
                          f"(injected sessions are written to <out>/injected/; use that exact dir)")
+    if args.shard:
+        k, n = (int(x) for x in args.shard.split("/"))
+        sessions = sessions[k::n]                     # deterministic partition (sorted glob order)
+        print(f"shard {k}/{n}: processing {len(sessions)} of the sessions on this GPU")
     missing = [s.session_id for s in sessions if not s.audio_path]
     if missing:
         raise SystemExit(f"{len(missing)} sessions have no audio_path — run 02_render_audio.py first")
