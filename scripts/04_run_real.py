@@ -20,8 +20,10 @@ def main():
     ap.add_argument("--fo_repo", default=None, help="freeze_omni: path to cloned Freeze-Omni repo")
     ap.add_argument("--model_path", default=None, help="freeze_omni: --model_path (audiollm checkpoints)")
     ap.add_argument("--llm_path", default=None, help="freeze_omni: frozen Qwen2-7B-Instruct path")
-    ap.add_argument("--onset_cache", default=None, help="freeze_omni: dir to save raw speak onsets "
-                    "per session (so the P2 controller can gate them without re-running the model)")
+    ap.add_argument("--onset_cache", default=None, help="freeze_omni/minicpmo: dir to save raw speak "
+                    "onsets per session (so the P2 controller can gate them without re-running)")
+    ap.add_argument("--mc_model_path", default="openbmb/MiniCPM-o-4_5", help="minicpmo: model path/id")
+    ap.add_argument("--ref_audio", default=None, help="minicpmo: short reference voice wav (TTS init)")
     ap.add_argument("--shard", default=None, help="k/N: process only session subset k-of-N (for "
                     "multi-GPU parallelism). Per-session onset caches from all shards merge in the "
                     "same --onset_cache dir; run 30_run_all on the full set afterwards.")
@@ -32,6 +34,11 @@ def main():
             raise SystemExit("freeze_omni needs --fo_repo --model_path --llm_path")
         system = FreezeOmniBaseline(args.fo_repo, args.model_path, args.llm_path,
                                     onset_cache=args.onset_cache)
+    elif args.pred == "minicpmo":
+        if not args.ref_audio:
+            raise SystemExit("minicpmo needs --ref_audio <short reference voice wav>")
+        from mpfd.baselines.minicpmo import MiniCPMoBaseline
+        system = MiniCPMoBaseline(args.mc_model_path, args.ref_audio, onset_cache=args.onset_cache)
     elif args.pred in REAL_SYSTEMS:
         system = REAL_SYSTEMS[args.pred]
     else:
