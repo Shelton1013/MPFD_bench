@@ -112,6 +112,18 @@ under-responding — because "directed at the agent" and "directed at another pe
 near-identical. (4) The addressee task is not a keyword regex: on the graded synthetic curve a strong
 lexical+context baseline drops to chance at I2.
 
+**The frontier (real-trained gate, Track D, sweeping the decision threshold):**
+
+| thresh | 0.10 | 0.30 | 0.50 | 0.60 | 0.70 | 0.80 | 0.90 | oracle |
+|---|---|---|---|---|---|---|---|---|
+| FBR | 0.810 | 0.625 | 0.427 | 0.265 | 0.049 | 0.022 | 0.009 | **0.008** |
+| miss | 0.000 | 0.000 | 0.111 | 0.222 | 0.422 | 0.511 | 0.778 | **0.022** |
+
+No threshold approaches the oracle corner: at matched low FBR (≈0.009) the gate's miss is 0.78 vs
+oracle's 0.02; at matched low miss (≈0) its FBR is 0.6–0.8 vs oracle's 0.008; the closest balanced
+point (0.265, 0.222) is ~0.35 from the origin while oracle is ~0.02. The whole frontier is bowed an
+order of magnitude away from the ideal corner — the cost of imperfect addressee inference.
+
 **Core finding / open problem defined by MPFD-Bench:** multi-party addressee-gating works given the
 addressee, but resolving the addressee from audio/text alone is bounded well away from the ideal
 corner. Closing it needs information beyond text — role grounding (what the agent can do), explicit
