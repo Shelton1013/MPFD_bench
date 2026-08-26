@@ -42,14 +42,24 @@ def main():
     for name in ("init_tts", "init_tts_module", "prepare_tts"):    # init TTS if such a method exists
         if hasattr(model, name):
             print(f"  calling model.{name}() ..."); getattr(model, name)(); break
-    for name in ("prepare", "prepare_session", "reset_session"):    # session init if it exists
-        if hasattr(model, name):
+    import inspect
+    if hasattr(model, "prepare"):
+        try:
+            print("prepare signature:", inspect.signature(model.prepare))
+        except Exception:
+            pass
+        try:   # duplex models need a persona; prepare loads the ref voice (needs torchcodec)
+            model.prepare(prefix_system_prompt="You are a helpful assistant.",
+                          prompt_wav_path=args.ref_audio)
+            print("  prepare OK (system_prompt + prompt_wav_path)")
+        except TypeError:
             try:
-                getattr(model, name)(prompt_wav_path=args.ref_audio)
-                print(f"  called model.{name}(prompt_wav_path=...)")
+                model.prepare(prompt_wav_path=args.ref_audio)
+                print("  prepare OK (prompt_wav_path only)")
             except Exception as e:
-                print(f"  model.{name} exists but call failed: {str(e)[:80]}")
-            break
+                print(f"  prepare FAILED: {str(e)[:120]}")
+        except Exception as e:
+            print(f"  prepare FAILED: {str(e)[:120]}")
 
     wav, sr = sf.read(args.wav)
     if getattr(wav, "ndim", 1) > 1:
