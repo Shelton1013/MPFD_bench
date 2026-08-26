@@ -42,24 +42,23 @@ def main():
     for name in ("init_tts", "init_tts_module", "prepare_tts"):    # init TTS if such a method exists
         if hasattr(model, name):
             print(f"  calling model.{name}() ..."); getattr(model, name)(); break
-    import inspect
+    import inspect, soundfile as sf, torch
+    ref_wav, ref_sr = sf.read(args.ref_audio)          # load ref ourselves -> bypass broken torchcodec
+    if getattr(ref_wav, "ndim", 1) > 1:
+        ref_wav = ref_wav.mean(1)
+    if ref_sr != 16000:
+        import torchaudio
+        ref_wav = torchaudio.transforms.Resample(ref_sr, 16000)(torch.tensor(ref_wav).float()).numpy()
+    ref_wav = ref_wav.astype(np.float32)
     if hasattr(model, "prepare"):
+        print("prepare signature:", inspect.signature(model.prepare))
         try:
-            print("prepare signature:", inspect.signature(model.prepare))
-        except Exception:
-            pass
-        try:   # duplex models need a persona; prepare loads the ref voice (needs torchcodec)
-            model.prepare(prefix_system_prompt="You are a helpful assistant.",
-                          prompt_wav_path=args.ref_audio)
-            print("  prepare OK (system_prompt + prompt_wav_path)")
-        except TypeError:
-            try:
-                model.prepare(prompt_wav_path=args.ref_audio)
-                print("  prepare OK (prompt_wav_path only)")
-            except Exception as e:
-                print(f"  prepare FAILED: {str(e)[:120]}")
+            model.prepare(prefix_system_prompt="You are a helpful assistant.", ref_audio=ref_wav)
+            print("  prepare OK (ref_audio ndarray, no torchcodec)")
         except Exception as e:
-            print(f"  prepare FAILED: {str(e)[:120]}")
+            print(f"  prepare FAILED: {str(e)[:150]}")
+    if hasattr(model, "streaming_generate"):
+        print("streaming_generate signature:", inspect.signature(model.streaming_generate))
 
     wav, sr = sf.read(args.wav)
     if getattr(wav, "ndim", 1) > 1:
@@ -74,8 +73,7 @@ def main():
     for i in range(min(args.n_chunks, len(wav) // step)):
         chunk = wav[i * step:(i + 1) * step].astype(np.float32)
         model.streaming_prefill(audio_waveform=chunk, frame_list=[])   # [VERIFY] arg names/format
-        result = model.streaming_generate(prompt_wav_path=args.ref_audio,
-                                          max_new_speak_tokens_per_chunk=20, decode_mode="sampling")
+        result = model.streaming_generate(max_new_speak_tokens_per_chunk=20, decode_mode="sampling")
         if i == 0:
             print("  [result keys]:", list(result.keys()))            # so we see the real schema
         is_listen = result.get("is_listen", None)
