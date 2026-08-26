@@ -45,7 +45,7 @@ class MiniCPMoBaseline:
         import torch
         from transformers import AutoModel
         model = AutoModel.from_pretrained(model_path, trust_remote_code=True,
-                                          attn_implementation="sdpa", dtype=torch.bfloat16)
+                                          attn_implementation="sdpa", torch_dtype=torch.bfloat16)
         self.model = model.eval().cuda().as_duplex()
 
     def __call__(self, session: Session) -> SystemOutput:
