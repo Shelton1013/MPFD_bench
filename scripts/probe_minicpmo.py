@@ -34,12 +34,22 @@ def main():
                                       attn_implementation="sdpa", torch_dtype=torch.bfloat16)
     model = model.eval().cuda()
     model = model.as_duplex()                          # [VERIFY] full-duplex mode
-    model.init_tts()                                   # [VERIFY]
-    # [VERIFY] session init — some versions use model.prepare(...), others config on streaming_generate
-    try:
-        model.prepare(prompt_wav_path=args.ref_audio)
-    except Exception as e:
-        print(f"[note] model.prepare failed ({e}); continuing without it")
+    print("duplex object type:", type(model).__name__)
+    meth = sorted(m for m in dir(model) if not m.startswith("__")
+                  and any(k in m.lower() for k in ("tts", "stream", "prepare", "duplex",
+                          "generate", "prefill", "reset", "init", "omni", "listen", "speak")))
+    print("relevant methods:", meth)
+    for name in ("init_tts", "init_tts_module", "prepare_tts"):    # init TTS if such a method exists
+        if hasattr(model, name):
+            print(f"  calling model.{name}() ..."); getattr(model, name)(); break
+    for name in ("prepare", "prepare_session", "reset_session"):    # session init if it exists
+        if hasattr(model, name):
+            try:
+                getattr(model, name)(prompt_wav_path=args.ref_audio)
+                print(f"  called model.{name}(prompt_wav_path=...)")
+            except Exception as e:
+                print(f"  model.{name} exists but call failed: {str(e)[:80]}")
+            break
 
     wav, sr = sf.read(args.wav)
     if getattr(wav, "ndim", 1) > 1:
